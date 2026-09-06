@@ -2,7 +2,11 @@ name: Auto Renew Bot-hosting
 
 on:
   schedule:
-    - cron: '0 1 * * *' # 每天UTC 1点 (北京时间9点, 一般都会推迟),自行根据服务到期时间调整
+    - cron: '20 1 * * *'  # 每日 UTC 01:20 = 北京时间 09:20
+                           # 原为每 3 天：GitHub Actions schedule 本身有 5~60 分钟延迟，
+                           # 3 天周期 + 续期管 4 天只剩 1 天缓冲，一次延迟或失败就漏续。
+                           # 改为每日：撞 20 小时冷却时脚本会自动 early-exit 并通知，无副作用。
+                           # 取 01:20 而非 01:00：整点是排队高峰，错开能减少延迟。
   workflow_dispatch:
 
 jobs:
@@ -45,6 +49,16 @@ jobs:
         run: |
           xvfb-run --auto-servernum python3 app.py
 
+      - name: 📤 上传截图证据
+        # 脚本在失败路径会保存 *.png 诊断截图；原来没有 artifact step，全部丢失。
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-hosting-screenshots
+          path: '*.png'
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: 🧽 清理进程和临时文件
         if: always()
         run: |
@@ -59,12 +73,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # 只保留最近 5 条，其余删除。
+          # 原实现 count>1 就删，等于每次只留 1 条 —— 15 条 run 历史被清空，
+          # 出问题（例如续期报「结果未知」）时根本回看不了日志。
+          KEEP=5
           runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
           count=0
           for run_id in $runs; do
             count=$((count + 1))
-            if [ $count -gt 1 ]; then
+            if [ $count -gt $KEEP ]; then
               echo "删除运行记录: $run_id"
               gh run delete $run_id || true
+            else
+              echo "保留运行记录: $run_id ($count/$KEEP)"
             fi
           done
