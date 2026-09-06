@@ -510,44 +510,75 @@ def main():
             except Exception as e:
                 print(f"续期按钮点击失败: {e}")
 
-            print("⏳ 等待新的过期时间...")
-            sb.sleep(6)
+            print("⏳ 等待后台确认续期（最多 60 秒）...")
+            # 原版只等 6 秒，页面/API 未及时刷新便误报“结果未知”。
+            # 轮询页面文字及到期日期；最后再刷新一次，避免读取旧 DOM。
+            new_page_text = ""
+            new_expiry = None
+            new_countdown = None
+            renewal_confirmed = False
+            success_markers = (
+                "renewal successful", "renewed successfully", "successfully renewed",
+                "续期成功", "renewed for 4 days", "renew for 4 days"
+            )
+            for poll in range(1, 13):
+                sb.sleep(5)
+                new_page_text = sb.get_page_source()
+                new_expiry = extract_expiry_date(new_page_text)
+                new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
+                new_countdown = new_match.group(1) if new_match else None
+                lowered = new_page_text.lower()
+                if (new_expiry and new_expiry != current_expiry) or any(
+                    marker in lowered for marker in success_markers[:-2]
+                ):
+                    renewal_confirmed = True
+                    print(f"✅ 第 {poll} 次检查确认续期已生效")
+                    break
+                print(f"⏳ 第 {poll}/12 次检查：页面尚未确认续期")
 
-            # 提取新的到期日期和倒计时
-            new_page_text = sb.get_page_source()
-            new_expiry = extract_expiry_date(new_page_text)
-            new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
-            if new_match:
-                new_countdown = new_match.group(1)
-                print(f"✅ 续期成功！新的倒计时: {new_countdown}")
+            if not renewal_confirmed:
+                print("🔄 刷新账单页后作最后一次确认...")
+                try:
+                    sb.refresh()
+                    sb.wait_for_ready_state_complete()
+                    sb.sleep(5)
+                    new_page_text = sb.get_page_source()
+                    new_expiry = extract_expiry_date(new_page_text)
+                    new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
+                    new_countdown = new_match.group(1) if new_match else None
+                    lowered = new_page_text.lower()
+                    renewal_confirmed = bool(
+                        (new_expiry and new_expiry != current_expiry) or
+                        any(marker in lowered for marker in success_markers[:-2])
+                    )
+                except Exception as e:
+                    print(f"⚠️ 刷新确认失败: {e}")
+
+            if renewal_confirmed:
+                print("✅ 续期成功！")
+                if new_countdown:
+                    print(f"⏱️ 新的倒计时: {new_countdown}")
                 if new_expiry:
                     print(f"📅 新的到期日期: {new_expiry}")
                 send_telegram_message(
                     format_notification(
                         "✅ 续期成功",
-                        extra=f"⏱️ 可续期时间: {format_countdown(new_countdown)}后",
+                        extra=(f"⏱️ 可续期时间: {format_countdown(new_countdown)}后"
+                               if new_countdown else "到期日期已确认更新"),
                         expiry_date=new_expiry or "（未获取到）"
                     )
                 )
             else:
-                if new_expiry and new_expiry != current_expiry:
-                    print(f"✅ 续期成功，到期日期已更新为: {new_expiry}")
-                    send_telegram_message(
-                        format_notification(
-                            "✅ 续期成功",
-                            extra="到期日期已更新",
-                            expiry_date=new_expiry
-                        )
+                # 关键修复：不能只发警告后 return 0，否则 Actions 会显示 success。
+                print("❌ 续期未能确认：到期日期/成功提示均未变化")
+                send_telegram_message(
+                    format_notification(
+                        "❌ 续期失败",
+                        extra="按钮已点击但后台未确认，请检查账户或稍后重试",
+                        expiry_date=new_expiry or current_expiry or "（未获取到）"
                     )
-                else:
-                    print("⚠️ 续期结果未知，到期日期未变化，请手动检查")
-                    send_telegram_message(
-                        format_notification(
-                            "⚠️ 续期可能未成功",
-                            extra="请登录后台检查",
-                            expiry_date=current_expiry or "（未获取到）"
-                        )
-                    )
+                )
+                raise RuntimeError("renewal was clicked but could not be confirmed")
 
         else:
             if countdown_text:
