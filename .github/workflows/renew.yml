@@ -53,7 +53,7 @@ jobs:
       - name: 📤 上传截图证据
         # 脚本在失败路径会保存 *.png 诊断截图；原来没有 artifact step，全部丢失。
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bot-hosting-screenshots
           path: '*.png'
