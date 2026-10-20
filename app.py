@@ -949,7 +949,17 @@ def main():
             # 站方唔受理。短冷卻（幾分鐘）值得等一等再撳；等唔到就當「未到續期時間」，
             # 唔應該標紅。
             if cooldown_selector and not outer_renew_selector:
-                _deadline = time.time() + 300
+                _cap = 300
+                if cooldown_left:
+                    try:
+                        _h, _mi, _se = [int(x) for x in cooldown_left.split(":")]
+                        _cap = min(max(300, _h * 3600 + _mi * 60 + _se + 60), 20 * 60)
+                    except Exception:
+                        pass
+                print(f"   ⏳ 冷卻 {cooldown_left or '?'}，最多等 {_cap // 60} 分鐘")
+                _deadline = time.time() + _cap
+                _still_cooling = False
+                _last_cd = cooldown_left
                 while time.time() < _deadline:
                     sb.sleep(20)
                     try:
@@ -957,7 +967,11 @@ def main():
                     except Exception:
                         break
                     if re.search(r"cooldown", _txt, re.I):
+                        _m2 = re.search(r"(\d{2}:\d{2}:\d{2})", _txt)
+                        if _m2:
+                            _last_cd = _m2.group(1)
                         print(f"   ⏳ 仍然冷卻: '{_txt}'")
+                        _still_cooling = True
                         continue
                     if "Renew in" in _txt:
                         _m = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", _txt)
@@ -966,6 +980,12 @@ def main():
                     outer_renew_selector = cooldown_selector
                     print(f"   ✅ 冷卻結束，掣可用: '{_txt}'")
                     break
+                if _still_cooling and not outer_renew_selector:
+                    print(f"ℹ️ 冷卻未過（剩 {_last_cd}），留待下次排程")
+                    _record(report, target, "⏳ 冷卻中",
+                            extra=f"站方冷卻未過（剩 {_last_cd}），下次排程再試",
+                            expiry=current_expiry or "")
+                    return report
 
             # 点击外部续期按钮等待弹窗
             if outer_renew_selector:
