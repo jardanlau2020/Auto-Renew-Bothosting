@@ -953,7 +953,16 @@ def main():
                 if cooldown_left:
                     try:
                         _h, _mi, _se = [int(x) for x in cooldown_left.split(":")]
-                        _cap = min(max(300, _h * 3600 + _mi * 60 + _se + 60), 20 * 60)
+                        _cd_s = _h * 3600 + _mi * 60 + _se
+                        # 2026-10-29 加（與 02 同步）：冷卻可長達 22 小時，舊碼 cap 20 分鐘
+                        # 等於乾等 20 分鐘燒 Actions 分鐘。超過 15 分鐘直接判「未到時間」走人。
+                        if _cd_s > 900:
+                            print(f"ℹ️ 冷卻 {cooldown_left}（>15 分鐘），唔等，留待下次排程")
+                            _record(report, target, "⏳ 冷卻中",
+                                    extra=f"站方冷卻未過（剩 {cooldown_left}），下次排程再試",
+                                    expiry=current_expiry or "")
+                            return report
+                        _cap = max(300, _cd_s + 60)
                     except Exception:
                         pass
                 print(f"   ⏳ 冷卻 {cooldown_left or '?'}，最多等 {_cap // 60} 分鐘")
