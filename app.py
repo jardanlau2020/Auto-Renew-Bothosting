@@ -950,21 +950,26 @@ def main():
             # 唔應該標紅。
             if cooldown_selector and not outer_renew_selector:
                 _cap = 300
+                # 2026-10-29：冷卻可以長達 22 小時（實測 'Renewal cooldown 20:34:52'）。
+                # 舊碼 cap 20 分鐘 = 乾等燒 Actions 分鐘；而且舊退出分支叫 `_record(...)`，
+                # 但 01 版**根本冇呢個函式**（由 02 抄過嚟嘅死碼）→ NameError → run 直接失敗
+                # （run 40859382466）。改為 >15 分鐘即用 01 自己嘅 format_notification 發通知並 return。
+                _cd_s = None
                 if cooldown_left:
                     try:
                         _h, _mi, _se = [int(x) for x in cooldown_left.split(":")]
                         _cd_s = _h * 3600 + _mi * 60 + _se
-                        # 2026-10-29 加（與 02 同步）：冷卻可長達 22 小時，舊碼 cap 20 分鐘
-                        # 等於乾等 20 分鐘燒 Actions 分鐘。超過 15 分鐘直接判「未到時間」走人。
-                        if _cd_s > 900:
-                            print(f"ℹ️ 冷卻 {cooldown_left}（>15 分鐘），唔等，留待下次排程")
-                            _record(report, target, "⏳ 冷卻中",
-                                    extra=f"站方冷卻未過（剩 {cooldown_left}），下次排程再試",
-                                    expiry=current_expiry or "")
-                            return report
-                        _cap = max(300, _cd_s + 60)
                     except Exception:
-                        pass
+                        _cd_s = None
+                if _cd_s is not None and _cd_s > 900:
+                    print(f"ℹ️ 冷卻 {cooldown_left}（>15 分鐘），唔等，留待下次排程")
+                    send_telegram_message(format_notification(
+                        "⏳ 冷卻中",
+                        extra=f"站方冷卻未過（剩 {cooldown_left}），下次排程再試",
+                        expiry_date=current_expiry or ""))
+                    return
+                if _cd_s is not None:
+                    _cap = max(300, _cd_s + 60)
                 print(f"   ⏳ 冷卻 {cooldown_left or '?'}，最多等 {_cap // 60} 分鐘")
                 _deadline = time.time() + _cap
                 _still_cooling = False
@@ -991,10 +996,11 @@ def main():
                     break
                 if _still_cooling and not outer_renew_selector:
                     print(f"ℹ️ 冷卻未過（剩 {_last_cd}），留待下次排程")
-                    _record(report, target, "⏳ 冷卻中",
-                            extra=f"站方冷卻未過（剩 {_last_cd}），下次排程再試",
-                            expiry=current_expiry or "")
-                    return report
+                    send_telegram_message(format_notification(
+                        "⏳ 冷卻中",
+                        extra=f"站方冷卻未過（剩 {_last_cd}），下次排程再試",
+                        expiry_date=current_expiry or ""))
+                    return
 
             # 点击外部续期按钮等待弹窗
             if outer_renew_selector:
