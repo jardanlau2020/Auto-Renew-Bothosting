@@ -793,6 +793,34 @@ def do_discord_login(sb) -> bool:
 
 
 # 主流程
+
+def sync_session_token(sb):
+    """2026-11-08：無論有冇續期，都把最新 session_token 寫回 secret。
+
+    原本回寫段只喺 main 尾部，冷卻期提早 return（line ~1003）就跳過，
+    導致每次都要靠 Discord OAuth 重登（Discord token 1–2 日就死）。
+    """
+    try:
+        print("🔄 检查 SESSION_TOKEN 是否需要更新")
+        new_token, token_expiry = get_cookie_info(sb, "session_token")
+        if not new_token:
+            print("⚠️ 讀唔到 session_token，跳過回寫")
+            return
+        if not should_update_cookie(new_token, SESSION_TOKEN, token_expiry):
+            print("✅ SESSION_TOKEN 无需更新")
+            return
+        print("🔄 SESSION_TOKEN 需要更新")
+        if not GH_TOKEN:
+            print("⚠️ 未设置 GH_TOKEN，无法自动更新")
+            return
+        if update_github_secret("SESSION_TOKEN", new_token):
+            print("✅ SESSION_TOKEN 更新成功")
+        else:
+            print("⚠️ 更新失败，请检查 GH_TOKEN 权限")
+    except Exception as exc:
+        print(f"⚠️ 同步 SESSION_TOKEN 失敗: {type(exc).__name__}: {str(exc)[:120]}")
+
+
 def main():
     print("#" * 25)
     print("   Bot-hosting 自动续期")
@@ -1000,6 +1028,8 @@ def main():
                         "⏳ 冷卻中",
                         extra=f"站方冷卻未過（剩 {_last_cd}），下次排程再試",
                         expiry_date=current_expiry or ""))
+                    # 2026-11-08：冷卻期都要回寫 token，否則每次都要 Discord 重登
+                    sync_session_token(sb)
                     return
 
             # 点击外部续期按钮等待弹窗
@@ -1261,23 +1291,8 @@ def main():
                             )
                         )
 
-            # 更新SESSION_TOKEN 
-            print("🔄 检查 SESSION_TOKEN 是否需要更新")
-            new_token, token_expiry = get_cookie_info(sb, "session_token")
-            old_token = SESSION_TOKEN
-
-            if should_update_cookie(new_token, old_token, token_expiry):
-                print("🔄 SESSION_TOKEN 需要更新")
-                if GH_TOKEN:
-                    if update_github_secret("SESSION_TOKEN", new_token):
-                        print("✅ SESSION_TOKEN 更新成功")
-                    else:
-                        print("⚠️ 更新失败，请检查 GH_TOKEN 权限")
-                else:
-                    print("⚠️ 未设置 GH_TOKEN，无法自动更新")
-                    print(f"📋 请手动设置 SESSION_TOKEN = {new_token[:4]}...{new_token[-4:]}")
-            else:
-                print("✅ SESSION_TOKEN 无需更新")
+            # 更新SESSION_TOKEN（統一由 helper 處理）
+            sync_session_token(sb)
         
             print("🏁 脚本执行完毕")
     except Exception as e:
