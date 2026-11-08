@@ -995,6 +995,8 @@ def main():
                         "⏳ 冷卻中",
                         extra=f"站方冷卻未過（剩 {cooldown_left}），下次排程再試",
                         expiry_date=current_expiry or ""))
+                    # 2026-11-08：呢條路（冷卻 >15 分鐘）係最常走嘅，必須回寫 token
+                    sync_session_token(sb)
                     return
                 if _cd_s is not None:
                     _cap = max(300, _cd_s + 60)
