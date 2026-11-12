@@ -614,6 +614,8 @@ def format_countdown(countdown_str: str) -> str:
 # 获取过期日期
 def extract_expiry_date(page_source: str) -> str:
     patterns = [
+        r"[Ee]xpires\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})",
+        r"(\d{4}-\d{2}-\d{2})\s*[\-–]?\s*renew",
         r"[Ee]xpires\s*[:\-]?\s*(\d{4}/\d{2}/\d{2})",   # Expires 2026/07/07
         r"[Ee]xpires\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})",   # Expires 07/07/2026 (MM/DD/YYYY)
         r"(\d{4}/\d{2}/\d{2})\s*[\-–]\s*renew",        # 2026/07/07 - renew
@@ -631,6 +633,11 @@ def extract_expiry_date(page_source: str) -> str:
                     # 修正：将 MM/DD/YYYY 转为 YYYY/MM/DD
                     return f"{parts[2]}/{parts[0]}/{parts[1]}"
             return date_str
+    cands = re.findall(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}", page_source)
+    if cands:
+        print(f"🔍 到期日期候選: {cands[:8]}")
+        print(f"📅 改用候選第一個日期: {cands[0]}")
+        return cands[0]
     return None
 
 #   Discord OAuth 登录（SESSION_TOKEN 失效时的备用方案）
@@ -873,7 +880,7 @@ def main():
                 # CF 擋截頁兜底：URL 對但 Title 係「Access denied」= Cloudflare 瞬間擋截
                 # （02 run#14 實證），唔係 cookie 問題 —— reload 重試最多 3 次先判死。
                 for _retry in range(3):
-                    if "/a/billings" in current_url and "Access denied" not in current_title and "Just a moment" not in current_title:
+                    if ("/a/billings" in current_url or "/dash/billings" in current_url) and "Access denied" not in current_title and "Just a moment" not in current_title:
                         break
                     print(f"⚠️ 檢測到 CF 擋截/挑戰頁（Title: {current_title}），第 {_retry+1} 次 reload 重試...")
                     sb.sleep(8)
@@ -884,7 +891,7 @@ def main():
                     current_title = sb.get_title()
                     print(f"📝 当前URL: {current_url}, Title: {current_title}")
 
-                if "/a/billings" in current_url and "/login" not in current_url and "error=" not in current_url and "Access denied" not in current_title:
+                if ("/a/billings" in current_url or "/dash/billings" in current_url) and "/login" not in current_url and "error=" not in current_url and "Access denied" not in current_title:
                     login_ok = True
                     print("✅ SESSION_TOKEN 登录成功, 当前已到达账单页")
                     sb.save_screenshot("logged_in_token.png")
