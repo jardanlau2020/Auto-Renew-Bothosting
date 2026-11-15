@@ -911,7 +911,8 @@ def main():
                     current_title = sb.get_title()
                     print(f"📝 当前URL: {current_url}, Title: {current_title}")
 
-                    if "a/billings" in current_url:
+                    if ("a/billings" in current_url or "dash/billings" in current_url) \
+                            and "/login" not in current_url and "error=" not in current_url:
                         login_ok = True
                         print("✅ Discord OAuth 登录成功,当前已到达账单页")
                     else:
