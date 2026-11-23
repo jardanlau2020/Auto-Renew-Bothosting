@@ -978,7 +978,7 @@ def main():
                             outer_renew_selector = selector
                             print(f"✅ 续期按钮可用: '{button_text}'")
                             break
-                except Exception as e:
+                except Exception:
                     pass
 
             # 冷卻期（2026-10-16 新增）：掣顯示「Renewal cooldown HH:MM:SS」時，
@@ -1182,11 +1182,15 @@ def main():
                     new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
                     new_countdown = new_match.group(1) if new_match else None
                     lowered = new_page_text.lower()
-                    if (new_expiry and new_expiry != current_expiry) or any(
-                        marker in lowered for marker in success_markers[:-2]
-                    ):
+                    # 2026-11-23 修假成功：判定只认「到期日变化」。页面文案仅作日志参考，
+                    # 不参与判定（旧版 marker 命中即成功，无关提示也能命中 → 假成功）。
+                    marker_hit = [m for m in success_markers if m in lowered]
+                    if marker_hit and not toast_hint:
+                        toast_hint = " ".join(marker_hit)[:160]
+                        print(f"ℹ️ 页面文案命中（仅记录，不判定）: {toast_hint}")
+                    if new_expiry and new_expiry != current_expiry:
                         renewal_confirmed = True
-                        print(f"✅ 第 {poll} 次检查确认续期已生效")
+                        print(f"✅ 第 {poll} 次检查确认到期日已变化")
                         break
                     # 顺手抓一次性提示（toast/alert），后台拒绝时能看到原因
                     if not toast_hint:
@@ -1214,10 +1218,11 @@ def main():
                         new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
                         new_countdown = new_match.group(1) if new_match else None
                         lowered = new_page_text.lower()
-                        renewal_confirmed = bool(
-                            (new_expiry and new_expiry != current_expiry) or
-                            any(marker in lowered for marker in success_markers[:-2])
-                        )
+                        marker_hit = [m for m in success_markers if m in lowered]
+                        if marker_hit:
+                            print(f"ℹ️ 页面文案命中（仅记录，不判定）: {marker_hit}")
+                        # 只认到期日变化；文案/提示不参与判定
+                        renewal_confirmed = bool(new_expiry and new_expiry != current_expiry)
                     except Exception as e:
                         print(f"⚠️ 刷新确认失败: {e}")
 
