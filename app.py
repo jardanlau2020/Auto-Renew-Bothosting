@@ -1182,12 +1182,13 @@ def main():
                     new_match = re.search(r"Renew in (\d{2}:\d{2}:\d{2})", new_page_text)
                     new_countdown = new_match.group(1) if new_match else None
                     lowered = new_page_text.lower()
-                    if (new_expiry and new_expiry != current_expiry) or any(
-                        marker in lowered for marker in success_markers[:-2]
-                    ):
+                    # 2026-11-23 修假成功：只认到期日变化，成功文案只记日志。
+                    if new_expiry and new_expiry != current_expiry:
                         renewal_confirmed = True
-                        print(f"✅ 第 {poll} 次检查确认续期已生效")
+                        print(f"✅ 第 {poll} 次检查确认到期日已变化")
                         break
+                    if any(marker in lowered for marker in success_markers[:-2]):
+                        print("ℹ️ 页面出现成功文案，但到期日未变 → 不作为成功依据")
                     # 顺手抓一次性提示（toast/alert），后台拒绝时能看到原因
                     if not toast_hint:
                         for sel in ('[role="alert"]', '.toast', '.Toastify',
@@ -1215,9 +1216,12 @@ def main():
                         new_countdown = new_match.group(1) if new_match else None
                         lowered = new_page_text.lower()
                         renewal_confirmed = bool(
-                            (new_expiry and new_expiry != current_expiry) or
-                            any(marker in lowered for marker in success_markers[:-2])
+                            new_expiry and new_expiry != current_expiry
                         )
+                        if not renewal_confirmed and any(
+                            marker in lowered for marker in success_markers[:-2]
+                        ):
+                            print("ℹ️ 重载后仍有成功文案，但到期日未变 → 不作为成功依据")
                     except Exception as e:
                         print(f"⚠️ 刷新确认失败: {e}")
 
