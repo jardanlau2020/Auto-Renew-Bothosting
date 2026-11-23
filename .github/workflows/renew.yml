@@ -2,7 +2,13 @@ name: Auto Renew Bot-hosting
 
 on:
   schedule:
-    - cron: '20 1 * * *'  # 每日 UTC 01:20 = 北京时间 09:20
+    - cron: '20 1,9,17 * * *' # 每 8 小时：UTC 01:20 / 09:20 / 17:20 = 北京 09:20 / 17:20 / 01:20
+                           # 2026-11-23 改动：本账号（01）与同源 02 一样，靠 bot-hosting.net 的
+                           # session_token cookie 登录，而站方 session 寿命约 24h。
+                           # 实证：本 repo #123→#124 间隔 25.0h 已经擦边；同源 02 在 25.1h 直接失败
+                           # （登录页 error=disconnect、SESSION_TOKEN 登录失败）。
+                           # 每 8 小时一次，GitHub schedule 的排队延迟不会把间隔推过 24h。
+                           # 回滚：把 cron 改回 '20 1 * * *'，删掉上面这三行注释即可。
                            # 原为每 3 天：GitHub Actions schedule 本身有 5~60 分钟延迟，
                            # 3 天周期 + 续期管 4 天只剩 1 天缓冲，一次延迟或失败就漏续。
                            # 改为每日：撞 20 小时冷却时脚本会自动 early-exit 并通知，无副作用。
